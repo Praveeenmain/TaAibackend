@@ -1,0 +1,35 @@
+Audio table
+ CREATE TABLE Audio (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  googleId VARCHAR(255) NOT NULL,
+ transcription TEXT NOT NULL,
+  audio VARCHAR(255) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+   embedding JSON NOT NULL,
+   date DATETIME NOT NULL
+);
+
+
+CREATE TABLE notes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(255) NOT NULL,
+    exam VARCHAR(255) NOT NULL,
+    paper VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    topics TEXT NOT NULL,
+    text LONGTEXT NOT NULL,
+    vector JSON NOT NULL,
+    googleId VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE previouspapers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    text TEXT NOT NULL,
+    vector JSON NOT NULL,
+    date DATE NOT NULL,
+    googleId VARCHAR(255) NOT NULL,
+    INDEX (googleId)
+);
