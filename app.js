@@ -877,103 +877,104 @@ app.post('/aichat', authenticateJWT, async (req, res) => {
   const { question } = req.body;
 
   if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
+    return res.status(400).json({ error: 'Question is required' });
   }
 
   try {
-      const query = util.promisify(connection.query).bind(connection);
-      
-      const googleId = req.user.googleId; // Get Google ID from authenticated user
+    const query = util.promisify(connection.query).bind(connection);
+    
+    const googleId = req.user.googleId; // Get Google ID from authenticated user
 
-      const databases = [];
+    const databases = [];
 
-      // Determine which databases to query based on keywords
-      if (question.toLowerCase().includes('paper') || question.toLowerCase().includes('previous')) {
-          databases.push({
-              name: "previouspapers",
-              queryText: "SELECT text, vector FROM previouspapers WHERE googleId = ?",
-              fieldText: 'text',
-              fieldVector: 'vector'
-          });
-      }
-      if (question.toLowerCase().includes('audio')) {
-          databases.push({
-              name: "Audio",
-              queryText: "SELECT transcription, embedding FROM Audio WHERE googleId = ?",
-              fieldText: 'transcription',
-              fieldVector: 'embedding'
-          });
-      }
-      if (question.toLowerCase().includes('question') || question.toLowerCase().includes('notes')) {
-          databases.push({
-              name: "notes",
-              queryText: "SELECT text, vector FROM notes WHERE googleId = ?",
-              fieldText: 'text',
-              fieldVector: 'vector'
-          });
-      }
-
-      // If no keywords match, default to querying all databases
-      if (databases.length === 0) {
-          databases.push(
-              {
-                  name: "previouspapers",
-                  queryText: "SELECT text, vector FROM previouspapers WHERE googleId = ?",
-                  fieldText: 'text',
-                  fieldVector: 'vector'
-              },
-              {
-                  name: "Audio",
-                  queryText: "SELECT transcription, embedding FROM Audio WHERE googleId = ?",
-                  fieldText: 'transcription',
-                  fieldVector: 'embedding'
-              },
-              {
-                  name: "notes",
-                  queryText: "SELECT text, vector FROM notes WHERE googleId = ?",
-                  fieldText: 'text',
-                  fieldVector: 'vector'
-              }
-          );
-      }
-
-      const results = [];
-      for (const db of databases) {
-          const queryResult = await query(db.queryText, [googleId]);
-          if (queryResult.length > 0) {
-              results.push(...queryResult.map(res => ({
-                  context: res[db.fieldText],
-                  embedding: res[db.fieldVector]
-              })));
-          }
-      }
-
-      if (results.length === 0) {
-          return res.status(404).json({ error: 'No results found' });
-      }
-
-      // Create a combined context from all results
-      const combinedContext = results.map(res => res.context).join("\n");
-
-      // Call OpenAI API to get a response
-      const openaiResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          messages: [
-              { role: "system", content: "Give a short response in 2-4 lines." },
-              { role: "user", content: `Answer the question based on the following context:\n\n${combinedContext}\n\nQuestion: ${question}` }
-          ],
-          max_tokens: 200
+    // Determine which databases to query based on keywords
+    if (question.toLowerCase().includes('paper') || question.toLowerCase().includes('previous')) {
+      databases.push({
+        name: "previouspapers",
+        queryText: "SELECT text, vector FROM previouspapers WHERE googleId = ?",
+        fieldText: 'text',
+        fieldVector: 'vector'
       });
+    }
+    if (question.toLowerCase().includes('audio')) {
+      databases.push({
+        name: "Audio",
+        queryText: "SELECT transcription, embedding FROM Audio WHERE googleId = ?",
+        fieldText: 'transcription',
+        fieldVector: 'embedding'
+      });
+    }
+    if (question.toLowerCase().includes('question') || question.toLowerCase().includes('notes')) {
+      databases.push({
+        name: "notes",
+        queryText: "SELECT text, vector FROM notes WHERE googleId = ?",
+        fieldText: 'text',
+        fieldVector: 'vector'
+      });
+    }
 
-      const answer = openaiResponse.choices[0].message.content.trim();
-      const similarity = 1; // Adjust if needed
+    // If no keywords match, default to querying all databases
+    if (databases.length === 0) {
+      databases.push(
+        {
+          name: "previouspapers",
+          queryText: "SELECT text, vector FROM previouspapers WHERE googleId = ?",
+          fieldText: 'text',
+          fieldVector: 'vector'
+        },
+        {
+          name: "Audio",
+          queryText: "SELECT transcription, embedding FROM Audio WHERE googleId = ?",
+          fieldText: 'transcription',
+          fieldVector: 'embedding'
+        },
+        {
+          name: "notes",
+          queryText: "SELECT text, vector FROM notes WHERE googleId = ?",
+          fieldText: 'text',
+          fieldVector: 'vector'
+        }
+      );
+    }
 
-      res.status(200).json({ answer: answer, similarity });
+    const results = [];
+    for (const db of databases) {
+      const queryResult = await query(db.queryText, [googleId]);
+      if (queryResult.length > 0) {
+        results.push(...queryResult.map(res => ({
+          context: res[db.fieldText],
+          embedding: res[db.fieldVector]
+        })));
+      }
+    }
+
+    let combinedContext = '';
+    if (results.length > 0) {
+      // Create a combined context from all results
+      combinedContext = results.map(res => res.context).join("\n");
+    }
+
+    // Call OpenAI API to get a response
+    const openaiResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "Give a short response in 2-4 lines." },
+        { role: "user", content: combinedContext ? `Answer the question based on the following context:\n\n${combinedContext}\n\nQuestion: ${question}` : `Question: ${question}` }
+      ],
+      max_tokens: 200
+    });
+
+    const answer = openaiResponse.choices[0].message.content.trim();
+    const similarity = results.length > 0 ? 1 : 0; // Adjust similarity if needed
+
+    res.status(200).json({ answer: answer, similarity });
   } catch (error) {
-      console.error('Error processing request:', error);
-      res.status(500).json({ error: 'Error processing request' });
+    console.error('Error processing request:', error);
+    res.status(500).json({ error: 'Error processing request' });
   }
 });
+
+
 
 
 app.post('/students', authenticateJWT, (req, res) => {
@@ -1058,4 +1059,4 @@ app.delete('/student/:id', authenticateJWT, (req, res) => {
 
 
 
-app.listen(3002, () => console.log('Server running on port 3002'));
+app.listen(3003, () => console.log('Server running on port 3003'));
